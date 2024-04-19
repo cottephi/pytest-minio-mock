@@ -40,9 +40,13 @@ from minio.versioningconfig import VersioningConfig
 from urllib3.connection import HTTPConnection
 from urllib3.response import HTTPResponse
 
-
-# Define a simple class or named tuple to hold object info
-# ObjectInfo = namedtuple("ObjectInfo", ["object_name"])
+from .exceptions import (
+    no_such_key,
+    no_such_bucket,
+    no_such_version,
+    method_not_allowed,
+    invalid_version,
+)
 
 
 class MockMinioObjectVersion:
@@ -814,6 +818,9 @@ class MockMinioClient:
             HTTPResponse: A response object containing the object data.
         """
         self._health_check()
+        # self.__check_bucket(bucket_name)
+        # self.__check_object(bucket_name, object_name)
+        # self.__check_version_uuid(bucket_name, object_name, version_id)
 
         the_object_version = self.buckets[bucket_name].get_object(
             object_name, version_id
@@ -874,6 +881,7 @@ class MockMinioClient:
             str: Confirmation message indicating successful upload.
         """
         self._health_check()
+        # self.__check_bucket(bucket_name)
         if not self.bucket_exists(bucket_name):
             raise S3Error(
                 message="bucket does not exist",
@@ -938,6 +946,7 @@ class MockMinioClient:
         """
 
         self._health_check()
+        # self.__check_bucket(bucket_name)
         if not self.bucket_exists(bucket_name):
             raise S3Error(
                 message="bucket does not exist",
@@ -1134,6 +1143,7 @@ class MockMinioClient:
         OFF (filtered out by VersioningConfig itself)
         """
         self._health_check()
+        # self.__check_bucket(bucket_name)
         if not self.bucket_exists(bucket_name):
             raise S3Error(
                 message="bucket does not exist",
@@ -1154,6 +1164,7 @@ class MockMinioClient:
         SUSPENDED
         """
         self._health_check()
+        # self.__check_bucket(bucket_name)
         if not self.bucket_exists(bucket_name):
             raise S3Error(
                 message="bucket does not exist",
@@ -1193,6 +1204,7 @@ class MockMinioClient:
         """
 
         try:
+            # self.__check_bucket(bucket_name)
             if bucket_name not in self.buckets:
                 raise S3Error(
                     message="bucket does not exist",
@@ -1291,9 +1303,32 @@ class MockMinioClient:
             None: The method has no return value but indicates successful removal.
         """
         self._health_check()
+        # self.__check_bucket(bucket_name)
         return self.buckets[bucket_name].remove_object(
             object_name, version_id=version_id
         )
+
+    def __check_bucket(self, bucket_name):
+        if bucket_name not in self.buckets:
+            raise no_such_bucket(bucket_name)
+
+    def __check_object(self, bucket_name, object_name):
+        if object_name not in self.buckets[bucket_name]["objects"]:
+            raise no_such_key(bucket_name, object_name)
+
+    @staticmethod
+    def __check_version_uuid(bucket_name, object_name, version_id):
+        if version_id and not validators.uuid(version_id):
+            raise invalid_version(bucket_name, object_name)
+
+    def __check_object_version(self, bucket_name, object_name, version_id):
+        if version_id not in self.buckets[bucket_name]["objects"][object_name]:
+            raise no_such_version(bucket_name, object_name)
+
+    def __get_latest_non_deleted_object(self, bucket_name, object_name):
+        if (obj := list(self.buckets[bucket_name]["objects"][object_name].values())[-1]).is_delete_marker:
+            raise no_such_key(bucket_name, object_name)
+        return obj
 
 
 @pytest.fixture
