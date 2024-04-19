@@ -252,6 +252,28 @@ def test_versioned_objects_after_upload(minio_mock):
 
 @pytest.mark.UNIT
 @pytest.mark.API
+def test_stat_object():
+    bucket_name = "test-bucket"
+    object_name = "test-object"
+
+    client = Minio("http://local.host:9000")
+    client.make_bucket(bucket_name)
+    client.put_object(
+        bucket_name,
+        object_name,
+        b"coucou",
+        6,
+    )
+    client.set_bucket_versioning(bucket_name, VersioningConfig(ENABLED))
+
+    stat = client.stat_object(bucket_name, object_name)
+    assert stat.bucket_name == bucket_name
+    assert stat.object_name == object_name
+    assert stat.size == 6
+
+
+@pytest.mark.UNIT
+@pytest.mark.API
 @pytest.mark.FUNC
 @pytest.mark.parametrize("versioned", (True, False))
 def test_file_download(minio_mock, versioned):

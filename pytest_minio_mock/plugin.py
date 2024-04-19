@@ -1214,6 +1214,68 @@ class MockMinioClient:
         except Exception as e:
             raise e
 
+    # def stat_object(
+    #     self,
+    #     bucket_name,
+    #     object_name,
+    #     ssec=None,
+    #     version_id=None,
+    #     extra_headers=None,
+    #     extra_query_params=None,
+    # ) -> Object:
+    #     """
+    #     Get object information and metadata of an object.
+    #     """
+    #     self._health_check()
+    #     if bucket_name not in self.buckets:
+    #         raise S3Error(
+    #             message="bucket does not exist",
+    #             resource=bucket_name,
+    #             request_id=None,
+    #             host_id=None,
+    #             response="mocked_response",
+    #             code=404,
+    #             bucket_name=bucket_name,
+    #             object_name=None,
+    #         )
+    #     nosuchkey = S3Error(
+    #         message="The specified key does not exist.",
+    #         resource=f"/{bucket_name}/{object_name}",
+    #         request_id=None,
+    #         host_id=None,
+    #         response="mocked_response",
+    #         code=404,
+    #         bucket_name=bucket_name,
+    #         object_name=object_name,
+    #     )
+    #     if object_name not in self.buckets[bucket_name]["objects"]:
+    #         raise nosuchkey
+    #     obj = self.buckets[bucket_name]["objects"][object_name]
+    #     if self.get_bucket_versioning(bucket_name) != OFF:
+    #         version_id = list(obj.keys())[-1]
+    #     try:
+    #         obj = obj[version_id]
+    #     except KeyError:
+    #         raise S3Error(
+    #             message="The specified version does not exist",
+    #             resource=f"/{bucket_name}/{object_name}",
+    #             request_id=None,
+    #             host_id=None,
+    #             response="mocked_response",
+    #             code=404,
+    #             bucket_name=bucket_name,
+    #             object_name=object_name,
+    #         )
+    #     if obj.is_delete_marker:
+    #         raise nosuchkey
+    #     return Object(
+    #         bucket_name,
+    #         object_name,
+    #         last_modified=obj.last_modified,
+    #         version_id=version_id,
+    #         size=len(obj.data) if obj.data else 0,
+    #     )
+
     def remove_object(self, bucket_name, object_name, version_id=None):
         """
         Removes an object from a bucket in the mock Minio server.
