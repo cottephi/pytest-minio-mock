@@ -55,6 +55,7 @@ class MockMinioObjectVersion:
         version_id (str, optional): The version of the object.
         is_delete_marker (bool): whether this object is marked as deleted on a
           versioned bucket
+        last_modified (datetime, optional): last time the object was modified
     """
 
     def __init__(self, object_name, data, version_id, is_delete_marker, is_latest):
@@ -108,6 +109,11 @@ class MockMinioObjectVersion:
     def object_name(self):
         """Get the name of the object."""
         return self._object_name
+
+    @property
+    def last_modified(self):
+        """Get last modified time."""
+        return self._last_modified
 
     @property
     def is_latest(self):
