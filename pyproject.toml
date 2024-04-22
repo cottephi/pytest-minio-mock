@@ -1,0 +1,157 @@
+[tool.poetry]
+name = "pytest-minio-mock"
+version = "0.1.0"
+description = "A pytest plugin for mocking Minio S3 interactions. Forked from https://github.com/oussjarrousse/pytest-minio-mock"
+authors = ["Philippe COTTE <cottephi@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+classifiers=[
+    "Framework :: Pytest",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Testing",
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+minio = "^7.2.5"
+pytest = "^8.1.1"
+validators = "^0.28.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest-mock = "^3.10.0"
+pre-commit = "^3.3.3"
+pytest-cov = "^4.1.0"
+pytest-sugar = "^0.9.7"
+pytest-xdist = "^3.5.0"
+expects = "^0.9.0"
+tox = "^4.14.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = "."
+cache_dir = ".cache/pytest_cache"
+testpaths = ['tests']
+addopts = [
+    "--cov-report=term",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--cov-fail-under=90",
+    "--numprocesses=auto",
+    "--dist=load",
+    "--force-sugar",
+]
+required_plugins = [
+    "pytest-mock>=3.10.0",
+    "pytest-cov>=4.1.0",
+    "pytest-xdist>=3.5.0",
+]
+
+[tool.coverage.run]
+# Branches mode has an issue, it's why we don't have 100% coverage for now:
+# https://github.com/nedbat/coveragepy/issues/605
+ branch = true
+
+[tool.coverage.report]
+precision = 2
+
+[tool.ruff]
+exclude = [
+    ".git",
+    ".eggs",
+    ".gitlab",
+    ".idea",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".vscode",
+    "__pycache__",
+    "dist",
+    "docs",
+    "htmlcov",
+    ".venv",
+]
+line-length = 80
+indent-width = 4
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D",
+    "ANN",
+    "TD",
+    "FIX",
+    "COM812",
+    "ISC001",
+    "PT001",
+    "TRY003",
+    "EM101",
+    "EM102",
+    "TRY201",
+    "G004",
+    "SIM105",
+    "BLE001",
+    "B008",
+    "FBT001",
+    "TID252",
+    "PLR2004",
+    "TRY002",
+    "FBT002",
+    "FBT003",
+    "S608", # Already catched by bandit.
+    "S310", # same
+    "S301", # same
+    "DTZ005",
+    "ERA001",
+    "ARG001",  # we know there will be unused arguments, since we mock methods
+    "ARG002",  # same
+]
+
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# Enable auto-formatting of code examples in docstrings. Markdown,
+# reStructuredText code/literal blocks and doctests are all supported.
+#
+# This is currently disabled by default, but it is planned for this
+# to be opt-out in the future.
+docstring-code-format = false
+
+# Set the line length limit used when formatting code snippets in
+# docstrings.
+#
+# This only has an effect when the `docstring-code-format` setting is
+# enabled.
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.pylint]
+max-args = 15
+
+[tool.ruff.lint.mccabe]
+max-complexity = 13
+
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/*" = ["PT007", "SLF001"]
+
+[tool.bandit]
+exclude_dirs = [
+    "tests",
+    ".venv",
+]
