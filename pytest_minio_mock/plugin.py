@@ -11,10 +11,11 @@ import validators
 from minio import Minio
 from minio.commonconfig import ENABLED, Tags
 from minio.datatypes import Object
-from minio.helpers import ProgressType
+from minio.helpers import ObjectWriteResult, ProgressType
 from minio.retention import Retention
 from minio.sse import Sse, SseCustomerKey
 from minio.versioningconfig import OFF, SUSPENDED, VersioningConfig
+from urllib3._collections import HTTPHeaderDict
 from urllib3.connection import HTTPConnection
 from urllib3.response import HTTPResponse
 
@@ -25,6 +26,7 @@ from .exceptions import (
     no_such_key,
     no_such_version,
 )
+from .utils import _list_objects_checks
 
 
 class MockMinioObjectVersion:
@@ -144,6 +146,7 @@ class MockMinioObject:
             is_delete_marker=is_delete_marker,
             metadata=metadata,
         )
+        return self._versions[self.latest_version_id]
 
     def put_object(
         self,
@@ -159,7 +162,7 @@ class MockMinioObject:
         retention: Retention,
         legal_hold: bool,
         versioning: VersioningConfig = VersioningConfig(),
-    ):
+    ) -> ObjectWriteResult:
         # If versioning is OFF, there can only be one version of an object
         # (store a read version_id non-the-less, but the version_id is 'null')
         if versioning.status == OFF:
@@ -168,10 +171,19 @@ class MockMinioObject:
         # According to
         # https://min.io/docs/minio/linux/administration/object-management/object-versioning.html#suspend-bucket-versioning
         # objects created when versioning is suspended have a 'null' version ID
-        return self.put_object_version(
+        obj_version = self.put_object_version(
             data=data,
             version_id="null" if versioning.status != ENABLED else uuid4(),
             metadata=metadata,
+        )
+        return ObjectWriteResult(
+            self.bucket_name,
+            self.object_name,
+            obj_version.version_id,
+            None,
+            HTTPHeaderDict(),
+            obj_version.last_modified,
+            None,
         )
 
     def get_object(
@@ -322,7 +334,7 @@ class MockMinioBucket:
         tags: Tags,
         retention: Retention,
         legal_hold: bool,
-    ):
+    ) -> ObjectWriteResult:
         if object_name not in self.objects:
             self.objects[object_name] = MockMinioObject(
                 self.bucket_name,
@@ -340,21 +352,30 @@ class MockMinioBucket:
                 legal_hold=legal_hold,
                 versioning=self.versioning,
             )
-        else:
-            self.objects[object_name].put_object(
-                data=data,
-                length=length,
-                content_type=content_type,
-                metadata=metadata,
-                sse=sse,
-                progress=progress,
-                part_size=part_size,
-                num_parallel_uploads=num_parallel_uploads,
-                tags=tags,
-                retention=retention,
-                legal_hold=legal_hold,
-                versioning=self.versioning,
+            obj_version = self.objects[object_name].get_latest()
+            return ObjectWriteResult(
+                self.bucket_name,
+                object_name,
+                obj_version.version_id,
+                None,
+                HTTPHeaderDict(),
+                obj_version.last_modified,
+                None,
             )
+        return self.objects[object_name].put_object(
+            data=data,
+            length=length,
+            content_type=content_type,
+            metadata=metadata,
+            sse=sse,
+            progress=progress,
+            part_size=part_size,
+            num_parallel_uploads=num_parallel_uploads,
+            tags=tags,
+            retention=retention,
+            legal_hold=legal_hold,
+            versioning=self.versioning,
+        )
 
     def remove_object(self, object_name: str, version_id: str | None = None):
         if object_name not in self.objects:
@@ -392,16 +413,9 @@ class MockMinioBucket:
         use_api_v1: bool = False,
         include_version: bool = False,
     ) -> Generator[Object, None, None]:
-        if use_api_v1:
-            raise ValueError("API V1 is not mocked")
-        if delimiter is None:
-            recursive = True
-        elif delimiter == "/":
-            recursive = False
-        else:
-            raise ValueError(
-                "Deliiter different from None or '/' is not mocked"
-            )
+        start_after, recursive = _list_objects_checks(
+            use_api_v1, start_after, delimiter
+        )
         seen_prefixes = set()
 
         for object_name, obj in self.objects.items():
@@ -587,7 +601,7 @@ class MockMinioClient:
         tags: Tags | None = None,
         retention: Retention | None = None,
         legal_hold: bool = False,
-    ):
+    ) -> ObjectWriteResult:
         with Path(file_path).open("rb") as file_data:
             data = file_data.read()
         return self.put_object(
@@ -621,8 +635,8 @@ class MockMinioClient:
         tags: Tags | None = None,
         retention: Retention | None = None,
         legal_hold: bool = False,
-    ):
-        self.__check_bucket(bucket_name).put_object(
+    ) -> ObjectWriteResult:
+        return self.__check_bucket(bucket_name).put_object(
             object_name=object_name,
             data=data,
             length=length,
@@ -636,8 +650,6 @@ class MockMinioClient:
             retention=retention,
             legal_hold=legal_hold,
         )
-
-        return "Upload successful"
 
     def get_presigned_url(
         self,
