@@ -744,6 +744,24 @@ docs = ["furo (>=2023.9.10)", "sphinx (>=7.2.6)", "sphinx-argparse-cli (>=1.11.1
 testing = ["build[virtualenv] (>=1.0.3)", "covdefaults (>=2.3)", "detect-test-pollution (>=1.2)", "devpi-process (>=1)", "diff-cover (>=8.0.2)", "distlib (>=0.3.8)", "flaky (>=3.7)", "hatch-vcs (>=0.4)", "hatchling (>=1.21)", "psutil (>=5.9.7)", "pytest (>=7.4.4)", "pytest-cov (>=4.1)", "pytest-mock (>=3.12)", "pytest-xdist (>=3.5)", "re-assert (>=1.1)", "time-machine (>=2.13)", "wheel (>=0.42)"]
 
 [[package]]
+name = "tox-gh"
+version = "1.3.1"
+description = "Seamless integration of tox into GitHub Actions."
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "tox_gh-1.3.1-py3-none-any.whl", hash = "sha256:c671c62ce23ae519a557c3da81e9aa7e35b3a66c69bad71908e595921f83e82d"},
+    {file = "tox_gh-1.3.1.tar.gz", hash = "sha256:594af90b740c14735c41b914b41db2d2aa0360929a1746af32bda4b9fef9bf3d"},
+]
+
+[package.dependencies]
+tox = ">=4.6"
+
+[package.extras]
+test = ["covdefaults (>=2.3)", "devpi-process (>=0.3)", "pytest (>=7.3.2)", "pytest-cov (>=4.1)", "pytest-mock (>=3.10)"]
+
+[[package]]
 name = "typing-extensions"
 version = "4.11.0"
 description = "Backported and Experimental Type Hints for Python 3.8+"
@@ -809,4 +827,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "16ef5d0e403ecb907a558acec214ea785062b23deabb2c0403aca423ee5b6c7f"
+content-hash = "f307544387b4773095582a5adfa2fdb8a937afc2fe6bbc05b778fb560b3253ac"

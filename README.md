@@ -31,6 +31,7 @@ Here's an example:
 ```python
 import minio
 import logging
+from pytest_minio_mock import minio_mock_servers, minio_mock  # Need to import both 
 
 def foo():
     try:
