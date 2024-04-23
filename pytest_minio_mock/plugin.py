@@ -380,11 +380,28 @@ class MockMinioBucket:
 
     def list_objects(
         self,
-        prefix: str,
-        recursive: bool,
-        start_after: str,
-        include_version: bool,
+        continuation_token: str | None = None,
+        delimiter: str | None = None,
+        encoding_type: str | None = None,
+        fetch_owner: bool | None = None,
+        include_user_meta: bool = False,
+        max_keys: int | None = None,
+        prefix: str | None = None,
+        start_after: str | None = None,
+        version_id_marker: str | None = None,
+        use_api_v1: bool = False,
+        include_version: bool = False,
     ) -> Generator[Object, None, None]:
+        if use_api_v1:
+            raise ValueError("API V1 is not mocked")
+        if delimiter is None:
+            recursive = True
+        elif delimiter == "/":
+            recursive = False
+        else:
+            raise ValueError(
+                "Deliiter different from None or '/' is not mocked"
+            )
         seen_prefixes = set()
 
         for object_name, obj in self.objects.items():
@@ -711,16 +728,57 @@ class MockMinioClient:
     def get_bucket_versioning(self, bucket_name: str) -> VersioningConfig:
         return self.__check_bucket(bucket_name).versioning
 
+    def _list_objects(
+        self,
+        bucket_name: str,
+        continuation_token: str | None = None,
+        delimiter: str | None = None,
+        encoding_type: str | None = None,
+        fetch_owner: bool | None = None,
+        include_user_meta: bool = False,
+        max_keys: int | None = None,
+        prefix: str | None = None,
+        start_after: str | None = None,
+        version_id_marker: str | None = None,
+        use_api_v1: bool = False,
+        include_version: bool = False,
+    ):
+        return self.__check_bucket(bucket_name).list_objects(
+            continuation_token=continuation_token,
+            delimiter=delimiter,
+            encoding_type=encoding_type,
+            fetch_owner=fetch_owner,
+            include_user_meta=include_user_meta,
+            max_keys=max_keys,
+            prefix=prefix,
+            start_after=start_after,
+            version_id_marker=version_id_marker,
+            use_api_v1=use_api_v1,
+            include_version=include_version,
+        )
+
     def list_objects(
         self,
         bucket_name: str,
         prefix: str = "",
         recursive: bool = False,
         start_after: str = "",
+        include_user_meta: bool = False,
         include_version: bool = False,
+        use_api_v1: bool = False,
+        use_url_encoding_type: bool = True,
+        fetch_owner: bool = False,
     ) -> Generator[Object, None, None]:
-        return self.__check_bucket(bucket_name).list_objects(
-            prefix, recursive, start_after, include_version
+        return self._list_objects(
+            bucket_name,
+            delimiter=None if recursive else "/",
+            include_user_meta=include_user_meta,
+            prefix=prefix,
+            start_after=start_after,
+            use_api_v1=use_api_v1,
+            include_version=include_version,
+            encoding_type="url" if use_url_encoding_type else None,
+            fetch_owner=fetch_owner,
         )
 
     def stat_object(
