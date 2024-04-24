@@ -2,69 +2,93 @@ import sys
 
 import pytest
 import validators
+from expects import (
+    be_a,
+    be_below,
+    be_false,
+    be_none,
+    be_true,
+    equal,
+    expect,
+    have_key,
+    have_len,
+)
 from minio import Minio
 from minio.commonconfig import ENABLED
 from minio.error import S3Error
-from minio.versioningconfig import OFF
-from minio.versioningconfig import SUSPENDED
-from minio.versioningconfig import VersioningConfig
+from minio.versioningconfig import OFF, SUSPENDED, VersioningConfig
 
-from pytest_minio_mock.plugin import MockMinioBucket
-from pytest_minio_mock.plugin import MockMinioObject
+from pytest_minio_mock.plugin import MockMinioBucket, MockMinioObject
 
 
-@pytest.mark.UNIT
+@pytest.mark.UNIT()
 class TestsMockMinioObject:
-    @pytest.mark.UNIT
+    @pytest.mark.UNIT()
     def test_mock_minio_object_init(self):
-        mock_minio_object = MockMinioObject("test-bucket", "test-object")
-        assert mock_minio_object.versions == {}
+        mock_minio_object = MockMinioObject(
+            "test-bucket",
+            "test-object",
+            b"",
+            0,
+            "application/octet-stream",
+            None,
+            None,
+            None,
+            0,
+            3,
+            None,
+            None,
+            False,
+            VersioningConfig(),
+        )
+        expect(mock_minio_object.versions).to(have_key("null"))
 
 
-@pytest.mark.UNIT
+@pytest.mark.UNIT()
 class TestsMockMinioBucket:
-    @pytest.mark.UNIT
+    @pytest.mark.UNIT()
     def test_mock_minio_bucket_init(self):
         mock_minio_bucket = MockMinioBucket(
             bucket_name="test-bucket", versioning=VersioningConfig()
         )
-        assert mock_minio_bucket.bucket_name == "test-bucket"
-        assert mock_minio_bucket.versioning.status == OFF
-        assert mock_minio_bucket.objects == {}
+        expect(mock_minio_bucket.bucket_name).to(equal("test-bucket"))
+        expect(mock_minio_bucket.versioning.status).to(equal(OFF))
+        expect(mock_minio_bucket.objects).to(equal({}))
 
         versioning_config = VersioningConfig(ENABLED)
         mock_minio_bucket = MockMinioBucket(
             bucket_name="test-bucket", versioning=versioning_config
         )
-        assert isinstance(mock_minio_bucket._versioning, VersioningConfig)
-        assert mock_minio_bucket.versioning.status == ENABLED
+        expect(mock_minio_bucket._versioning).to(be_a(VersioningConfig))
+        expect(mock_minio_bucket.versioning.status).to(equal(ENABLED))
 
-    @pytest.mark.UNIT
+    @pytest.mark.UNIT()
     def test_versioning(self):
         mock_minio_bucket = MockMinioBucket(
             bucket_name="test-bucket", versioning=VersioningConfig()
         )
         versioning_config = mock_minio_bucket.versioning
-        assert isinstance(versioning_config, VersioningConfig)
-        assert versioning_config.status == OFF
+        expect(versioning_config).to(be_a(VersioningConfig))
+        expect(versioning_config.status).to(equal(OFF))
         versioning_config = VersioningConfig(status=ENABLED)
         mock_minio_bucket.versioning = versioning_config
         versioning_config = mock_minio_bucket.versioning
-        assert isinstance(versioning_config, VersioningConfig)
-        assert versioning_config.status == ENABLED
+        expect(versioning_config).to(be_a(VersioningConfig))
+        expect(versioning_config.status).to(equal(ENABLED))
 
 
-@pytest.mark.UNIT
-@pytest.mark.API
+@pytest.mark.UNIT()
+@pytest.mark.API()
 def test_make_bucket(minio_mock):
     bucket_name = "test-bucket"
     client = Minio("http://local.host:9000")
+    expect(client.bucket_exists(bucket_name)).to(be_false)
     client.make_bucket(bucket_name)
-    assert client.bucket_exists(bucket_name), "Bucket should exist after creation"
+    expect(client.bucket_exists(bucket_name)).to(be_true)
 
 
-@pytest.mark.API
-@pytest.mark.FUNC
+@pytest.mark.API()
+@pytest.mark.FUNC()
 def test_putting_and_removing_objects_no_versionning(minio_mock):
     # simple thing
     bucket_name = "test-bucket"
@@ -74,29 +98,27 @@ def test_putting_and_removing_objects_no_versionning(minio_mock):
     client = Minio("http://local.host:9000")
     client.make_bucket(bucket_name)
     client.fput_object(bucket_name, object_name, file_path)
+    client.fput_object(bucket_name, object_name, file_path)
 
-    assert (
-        object_name in client.buckets[bucket_name].objects
-    ), "Object should be in the bucket after upload"
-    objects = list(client.list_objects(bucket_name))
-    assert len(objects) == 1
+    expect(client.buckets[bucket_name].objects).to(have_key(object_name))
+    expect(client.list_objects(bucket_name)).to(have_len(1))
     client.remove_object(bucket_name, object_name)
-    assert object_name not in client.buckets[bucket_name].objects
-    objects = list(client.list_objects(bucket_name))
-    assert len(objects) == 0
+    expect(client.buckets[bucket_name].objects).not_to(have_key(object_name))
+    expect(client.list_objects(bucket_name)).to(have_len(0))
 
-    # even if include version is True nothing should change because versioning is OFF
-    objects = list(client.list_objects(bucket_name, include_version=True))
-    assert len(objects) == 0
+    # even if include version is True nothing should change because versioning
+    # is OFF
+    expect(client.list_objects(bucket_name, include_version=True)).to(
+        have_len(0)
+    )
 
     # test retrieving object after it has been removed
-    with pytest.raises(S3Error) as error:
+    with pytest.raises(S3Error, match="The specified key does not exist"):
         _ = client.get_object(bucket_name, object_name)
-    assert "The specified key does not exist" in str(error.value)
 
 
-@pytest.mark.API
-@pytest.mark.FUNC
+@pytest.mark.API()
+@pytest.mark.FUNC()
 def test_putting_objects_with_versionning_enabled(minio_mock):
     client = Minio("http://local.host:9000")
     bucket_name = "test-bucket"
@@ -105,22 +127,24 @@ def test_putting_objects_with_versionning_enabled(minio_mock):
     client.make_bucket(bucket_name)
     # Versioning Enabled
     client.set_bucket_versioning(bucket_name, VersioningConfig(ENABLED))
-    # Add two objects
+    # Add 3 objects
     client.fput_object(bucket_name, object_name, file_path)
     client.fput_object(bucket_name, object_name, file_path)
-    # they should be two versions of the same object
-    # check list_objects with include_version=False returns only one object with is_latest=True
-    objects = list(client.list_objects(bucket_name, object_name, include_version=False))
-    assert len(objects) == 1
+    client.fput_object(bucket_name, object_name, file_path)
+    # there should be 3 versions of the same object
+    expect(
+        client.list_objects(bucket_name, object_name, include_version=False)
+    ).to(have_len(1))
     # check that versions are stored correctly and retrieved correctly
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 2
+    expect(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    ).to(have_len(3))
     with pytest.raises(S3Error, match="Invalid version"):
         client.get_object(bucket_name, object_name, version_id="wrong")
 
 
-@pytest.mark.API
-@pytest.mark.FUNC
+@pytest.mark.API()
+@pytest.mark.FUNC()
 def test_removing_object_version_with_versionning_enabled(minio_mock):
     client = Minio("http://local.host:9000")
     bucket_name = "test-bucket"
@@ -130,30 +154,78 @@ def test_removing_object_version_with_versionning_enabled(minio_mock):
 
     # Versioning Enabled
     client.set_bucket_versioning(bucket_name, VersioningConfig(ENABLED))
-    # Add two objects
+    # Add 3 objects
     client.fput_object(bucket_name, object_name, file_path)
     client.fput_object(bucket_name, object_name, file_path)
+    client.fput_object(bucket_name, object_name, file_path)
 
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    first_version = objects[0].version_id
-    last_version = objects[1].version_id
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+    newest_version = objects[0].version_id
+    middle_version = objects[1].version_id
+    oldest_version = objects[2].version_id
+    expect(objects[1].last_modified).to(be_below(objects[0].last_modified))
+    expect(objects[2].last_modified).to(be_below(objects[1].last_modified))
+    expect(objects[0].is_latest).to(equal("true"))
+    expect(objects[1].is_latest).to(equal("false"))
+    expect(objects[2].is_latest).to(equal("false"))
+    versions = list(
+        client.buckets[bucket_name].objects[object_name].versions.values()
+    )
 
-    client.remove_object(bucket_name, object_name, version_id=first_version)
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 1
-    assert objects[0].version_id == last_version
-    assert objects[0].is_latest == "true"
+    for i in range(len(objects)):
+        expect(objects[i].version_id).to(equal(versions[2 - i].version_id))
+
+    client.remove_object(bucket_name, object_name, version_id=oldest_version)
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+    expect(objects).to(have_len(2))
+    expect(objects[0].version_id).to(equal(newest_version))
+    expect(objects[1].version_id).to(equal(middle_version))
+    expect(objects[0].is_latest).to(equal("true"))
+    expect(objects[1].is_latest).to(equal("false"))
+    versions = list(
+        client.buckets[bucket_name].objects[object_name].versions.values()
+    )
+
+    for i in range(len(objects)):
+        expect(objects[i].version_id).to(equal(versions[1 - i].version_id))
+
+    client.remove_object(bucket_name, object_name, version_id=newest_version)
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+    expect(objects).to(have_len(1))
+    expect(objects[0].version_id).to(equal(middle_version))
+    expect(objects[0].is_latest).to(equal("true"))
+    versions = list(
+        client.buckets[bucket_name].objects[object_name].versions.values()
+    )
+
+    expect(objects[0].version_id).to(equal(versions[0].version_id))
 
     client.fput_object(bucket_name, object_name, file_path)
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 2
-    first_version = objects[0].version_id
-    assert first_version != last_version
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+    expect(objects).to(have_len(2))
+    expect(objects[0].version_id).not_to(equal(middle_version))
+    expect(objects[1].version_id).to(equal(middle_version))
+    versions = list(
+        client.buckets[bucket_name].objects[object_name].versions.values()
+    )
+
+    for i in range(len(objects)):
+        expect(objects[i].version_id).to(equal(versions[1 - i].version_id))
 
 
-@pytest.mark.API
-@pytest.mark.FUNC
-def test_putting_and_removing_and_listing_bjecst_with_versionning_enabled(minio_mock):
+@pytest.mark.API()
+@pytest.mark.FUNC()
+def test_putting_and_removing_and_listing_objects_with_versionning_enabled(
+    minio_mock,
+):
     client = Minio("http://local.host:9000")
     bucket_name = "test-bucket"
     object_name = "test-object"
@@ -162,55 +234,88 @@ def test_putting_and_removing_and_listing_bjecst_with_versionning_enabled(minio_
 
     # Versioning Enabled
     client.set_bucket_versioning(bucket_name, VersioningConfig(ENABLED))
-    # Add two objects
+    # Add 3 objects
     client.fput_object(bucket_name, object_name, file_path)
     client.fput_object(bucket_name, object_name, file_path)
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 2
+    client.fput_object(bucket_name, object_name, file_path)
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+    expect(objects).to(have_len(3))
     # removing the object with versioning enabled will add a delete marker
     client.remove_object(bucket_name, object_name)
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 3
-    assert objects[-1].is_delete_marker == True
+
+    expect(
+        list(
+            client.list_objects(bucket_name, object_name, include_version=True)
+        )
+    ).to(have_len(4))
+
+    expect(list(client.list_objects(bucket_name, object_name))).to(have_len(0))
+    versions = list(
+        client.buckets[bucket_name].objects[object_name].versions.values()
+    )
+    expect(versions).to(have_len(4))
+    expect(versions[-1].is_delete_marker).to(be_true)
 
     # removing the object again will have no effect
     client.remove_object(bucket_name, object_name)
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 3
-
-    # listing an object marked for deletion will return an empty list
-    objects = list(client.list_objects(bucket_name, object_name))
-    assert len(objects) == 0
+    versions2 = list(
+        client.buckets[bucket_name].objects[object_name].versions.values()
+    )
+    expect(versions2).to(equal(versions))
 
     # putting a new version after deletion will add a new version
     client.fput_object(bucket_name, object_name, file_path)
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 4
+    expect(
+        list(
+            client.list_objects(bucket_name, object_name, include_version=True)
+        )
+    ).to(have_len(5))
 
-    objects = list(client.list_objects(bucket_name, object_name))
-    assert len(objects) == 1
+    expect(list(client.list_objects(bucket_name, object_name))).to(have_len(1))
 
-    # removing the object again with versioning enabled will add a new deletion marker
+    # removing the object again with versioning enabled will add a new deletion
+    # marker
     client.remove_object(bucket_name, object_name)
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 5
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+    expect(objects).to(have_len(6))
+    versions = list(
+        client.buckets[bucket_name].objects[object_name].versions.values()
+    )
+    expect(versions).to(have_len(6))
+    expect(versions[0].is_delete_marker).to(be_false)
+    expect(versions[1].is_delete_marker).to(be_false)
+    expect(versions[2].is_delete_marker).to(be_false)
+    expect(versions[3].is_delete_marker).to(be_true)
+    expect(versions[4].is_delete_marker).to(be_false)
+    expect(versions[5].is_delete_marker).to(be_true)
+
+    expect(objects[0].is_delete_marker).to(be_false)
+    expect(objects[1].is_delete_marker).to(be_false)
+    expect(objects[2].is_delete_marker).to(be_false)
+    expect(objects[3].is_delete_marker).to(be_false)
+    expect(objects[4].is_delete_marker).to(be_true)
+    expect(objects[5].is_delete_marker).to(be_true)
+
+    expect(objects[0].version_id).to(equal(versions[4].version_id))
+    expect(objects[1].version_id).to(equal(versions[2].version_id))
+    expect(objects[2].version_id).to(equal(versions[1].version_id))
+    expect(objects[3].version_id).to(equal(versions[0].version_id))
+    expect(objects[4].version_id).to(equal(versions[5].version_id))
+    expect(objects[5].version_id).to(equal(versions[3].version_id))
 
     # trying to an object marked for deletion by version will raise an exception
-    with pytest.raises(S3Error) as error:
-        client.get_object(bucket_name, object_name, version_id=objects[3].version_id)
-    assert "not allowed against this resource" in str(error.value)
-
-    # trying to an object marked for deletion by version will raise an exception
-    with pytest.raises(S3Error) as error:
-        client.get_object(bucket_name, object_name, version_id=objects[4].version_id)
-    assert "not allowed against this resource" in str(error.value)
-
-    objects = list(client.list_objects(bucket_name, object_name))
-    assert len(objects) == 0
+    with pytest.raises(S3Error, match="not allowed against this resource"):
+        client.get_object(
+            bucket_name, object_name, version_id=versions[3].version_id
+        )
 
 
-@pytest.mark.API
-@pytest.mark.FUNC
+@pytest.mark.API()
+@pytest.mark.FUNC()
 def test_versioned_objects_after_upload(minio_mock):
     bucket_name = "test-bucket"
     object_name = "test-object"
@@ -220,39 +325,73 @@ def test_versioned_objects_after_upload(minio_mock):
     client.make_bucket(bucket_name)
     client.fput_object(bucket_name, object_name, file_path)
     client.set_bucket_versioning(bucket_name, VersioningConfig(ENABLED))
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 1
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+    expect(objects).to(have_len(1))
     first_version = objects[0].version_id
-    assert first_version == "null"
+    expect(first_version).to(be_none)
 
     client.fput_object(bucket_name, object_name, file_path)
     client.fput_object(bucket_name, object_name, file_path)
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
     last_version = objects[1].version_id
-    assert len(objects) == 3
-    assert objects[-1].version_id == "null"
-    assert last_version is not None
+    expect(objects).to(have_len(3))
+    expect(objects[-1].version_id).to(be_none)
+    expect(last_version).not_to(be_none)
     client.set_bucket_versioning(bucket_name, VersioningConfig(SUSPENDED))
 
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
 
     client.remove_object(bucket_name, object_name, objects[0].version_id)
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 2
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+    expect(objects).to(have_len(2))
 
     client.remove_object(bucket_name, object_name)
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 2
-    assert objects[-1].is_delete_marker == True
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+    expect(objects).to(have_len(2))
+    expect(objects[-1].is_delete_marker).to(be_true)
 
     client.remove_object(bucket_name, object_name, "null")
-    objects = list(client.list_objects(bucket_name, object_name, include_version=True))
-    assert len(objects) == 1
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+    expect(objects).to(have_len(1))
 
 
-@pytest.mark.UNIT
-@pytest.mark.API
-@pytest.mark.FUNC
+@pytest.mark.UNIT()
+@pytest.mark.API()
+def test_stat_object(minio_mock):
+    bucket_name = "test-bucket"
+    object_name = "test-object"
+
+    client = Minio("http://local.host:9000")
+    client.make_bucket(bucket_name)
+    client.put_object(
+        bucket_name,
+        object_name,
+        b"coucou",
+        6,
+    )
+    client.set_bucket_versioning(bucket_name, VersioningConfig(ENABLED))
+
+    stat = client.stat_object(bucket_name, object_name)
+    expect(stat.bucket_name).to(equal(bucket_name))
+    expect(stat.object_name).to(equal(object_name))
+    expect(stat.size).to(equal(6))
+
+
+@pytest.mark.UNIT()
+@pytest.mark.API()
+@pytest.mark.FUNC()
 @pytest.mark.parametrize("versioned", (True, False))
 def test_file_download(minio_mock, versioned):
     bucket_name = "test-bucket"
@@ -266,49 +405,47 @@ def test_file_download(minio_mock, versioned):
         client.set_bucket_versioning(bucket_name, VersioningConfig(ENABLED))
     client.put_object(bucket_name, object_name, file_content, length)
     if versioned:
-        version = list(
+        version = next(
             client.list_objects(bucket_name, object_name, include_version=True)
-        )[0].version_id
+        ).version_id
 
     response = client.get_object(bucket_name, object_name)
-    downloaded_content = response.data
-
-    assert (
-        downloaded_content == file_content
-    ), "Downloaded content should match the original"
+    expect(response.data).to(equal(file_content))
     if versioned:
-        response = client.get_object(bucket_name, object_name, version_id=version)
-        downloaded_content = response.data
-
-        assert (
-            downloaded_content == file_content
-        ), "Downloaded content should match the original"
+        response = client.get_object(
+            bucket_name, object_name, version_id=version
+        )
+        expect(response.data).to(equal(file_content))
 
 
-@pytest.mark.UNIT
-@pytest.mark.API
+@pytest.mark.UNIT()
+@pytest.mark.API()
 def test_bucket_exists(minio_mock):
     bucket_name = "existing-bucket"
     client = Minio("http://local.host:9000")
     client.make_bucket(bucket_name)
-    assert client.bucket_exists(bucket_name), "Bucket should exist"
+    expect(client.bucket_exists(bucket_name)).to(be_true)
 
 
-@pytest.mark.UNIT
-@pytest.mark.API
+@pytest.mark.UNIT()
+@pytest.mark.API()
 def test_bucket_versioning(minio_mock):
     bucket_name = "existing-bucket"
     client = Minio("http://local.host:9000")
     client.make_bucket(bucket_name)
-    assert client.get_bucket_versioning(bucket_name).status == "Off"
+    expect(client.get_bucket_versioning(bucket_name).status).to(equal("Off"))
     client.set_bucket_versioning(bucket_name, VersioningConfig(ENABLED))
-    assert client.get_bucket_versioning(bucket_name).status == "Enabled"
+    expect(client.get_bucket_versioning(bucket_name).status).to(
+        equal("Enabled")
+    )
     client.set_bucket_versioning(bucket_name, VersioningConfig("Suspended"))
-    assert client.get_bucket_versioning(bucket_name).status == "Suspended"
+    expect(client.get_bucket_versioning(bucket_name).status).to(
+        equal("Suspended")
+    )
 
 
-@pytest.mark.UNIT
-@pytest.mark.API
+@pytest.mark.UNIT()
+@pytest.mark.API()
 @pytest.mark.parametrize("versioned", (True, False))
 def test_get_presigned_url(minio_mock, versioned):
     bucket_name = "test-bucket"
@@ -325,14 +462,16 @@ def test_get_presigned_url(minio_mock, versioned):
         version = list(
             client.list_objects(bucket_name, object_name, include_version=True)
         )[-1].version_id
-    url = client.get_presigned_url("GET", bucket_name, object_name, version_id=version)
-    assert validators.url(url)
+    url = client.get_presigned_url(
+        "GET", bucket_name, object_name, version_id=version
+    )
+    expect(validators.url(url)).to(be_true)
     if version:
-        assert url.endswith(f"?versionId={version}")
+        expect(url.endswith(f"?versionId={version}")).to(be_true)
 
 
-@pytest.mark.UNIT
-@pytest.mark.API
+@pytest.mark.UNIT()
+@pytest.mark.API()
 def test_presigned_put_url(minio_mock):
     bucket_name = "test-bucket"
     object_name = "test-object"
@@ -342,11 +481,11 @@ def test_presigned_put_url(minio_mock):
     client.make_bucket(bucket_name)
     client.fput_object(bucket_name, object_name, file_path)
     url = client.presigned_put_object(bucket_name, object_name)
-    assert validators.url(url)
+    expect(validators.url(url)).to(be_true)
 
 
-@pytest.mark.UNIT
-@pytest.mark.API
+@pytest.mark.UNIT()
+@pytest.mark.API()
 def test_presigned_get_url(minio_mock):
     bucket_name = "test-bucket"
     object_name = "test-object"
@@ -356,11 +495,11 @@ def test_presigned_get_url(minio_mock):
     client.make_bucket(bucket_name)
     client.fput_object(bucket_name, object_name, file_path)
     url = client.presigned_get_object(bucket_name, object_name)
-    assert validators.url(url)
+    expect(validators.url(url)).to(be_true)
 
 
-@pytest.mark.UNIT
-@pytest.mark.API
+@pytest.mark.UNIT()
+@pytest.mark.API()
 def test_list_buckets(minio_mock):
     client = Minio("http://local.host:9000")
     buckets = client.list_buckets()
@@ -368,12 +507,12 @@ def test_list_buckets(minio_mock):
     bucket_name = "new-bucket"
     client.make_bucket(bucket_name)
     buckets = client.list_buckets()
-    assert len(buckets) == n + 1
+    expect(buckets).to(have_len(n + 1))
 
 
-@pytest.mark.REGRESSION
-@pytest.mark.UNIT
-@pytest.mark.API
+@pytest.mark.REGRESSION()
+@pytest.mark.UNIT()
+@pytest.mark.API()
 def test_list_objects(minio_mock):
     client = Minio("http://local.host:9000")
 
@@ -383,10 +522,14 @@ def test_list_objects(minio_mock):
     bucket_name = "new-bucket"
     client.make_bucket(bucket_name)
     objects = client.list_objects(bucket_name)
-    assert len(list(objects)) == 0
+    expect(list(objects)).to(have_len(0))
 
-    client.put_object(bucket_name, "a/b/c/object1", data=b"object1 data", length=12)
-    client.put_object(bucket_name, "a/b/object2", data=b"object2 data", length=12)
+    client.put_object(
+        bucket_name, "a/b/c/object1", data=b"object1 data", length=12
+    )
+    client.put_object(
+        bucket_name, "a/b/object2", data=b"object2 data", length=12
+    )
     client.put_object(bucket_name, "a/object3", data=b"object3 data", length=11)
     client.put_object(bucket_name, "object4", data=b"object4 data", length=11)
 
@@ -394,32 +537,41 @@ def test_list_objects(minio_mock):
     objects_recursive = list(
         client.list_objects(bucket_name, prefix="a/", recursive=True)
     )
-    assert len(objects_recursive) == 3, "Expected 3 objects under 'a/' with recursion"
-    # Check that all expected paths are returned
-    assert set(obj.object_name for obj in objects_recursive) == {
-        "a/b/c/object1",
-        "a/b/object2",
-        "a/object3",
-    }
+    expect(objects_recursive).to(have_len(3))
+    expect({obj.object_name for obj in objects_recursive}).to(
+        equal(
+            {
+                "a/b/c/object1",
+                "a/b/object2",
+                "a/object3",
+            }
+        )
+    )
 
     # Test non-recursive listing
     objects_non_recursive = client.list_objects(
         bucket_name, prefix="a/", recursive=False
     )
 
-    # Check that the correct path is returned
-    assert set(obj.object_name for obj in objects_non_recursive) == {
-        "a/object3",
-        "a/b/",
-    }
+    expect({obj.object_name for obj in objects_non_recursive}).to(
+        equal(
+            {
+                "a/object3",
+                "a/b/",
+            }
+        )
+    )
 
     # Test listing at the bucket root
     objects_root = client.list_objects(bucket_name, recursive=False)
     # Check that the correct paths are returned
-    assert set(obj.object_name for obj in objects_root) == {"a/", "object4"}
+
+    expect({obj.object_name for obj in objects_root}).to(
+        equal({"a/", "object4"})
+    )
 
 
-@pytest.mark.REGRESSION
+@pytest.mark.REGRESSION()
 def test_connecting_to_the_same_endpoint(minio_mock):
     client_1 = Minio("http://local.host:9000")
     client_1_buckets = ["bucket-1", "bucket-2", "bucket-3"]
@@ -428,4 +580,4 @@ def test_connecting_to_the_same_endpoint(minio_mock):
 
     client_2 = Minio("http://local.host:9000")
     client_2_buckets = client_2.list_buckets()
-    assert client_2_buckets == client_1_buckets
+    expect(client_2_buckets).to(equal(client_1_buckets))

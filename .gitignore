@@ -1,25 +1,78 @@
 # Byte-compiled / optimized / DLL files
-*__pycache__
+__pycache__/
+*.py[cod]
+*$py.class
 
-# Mac OS X
-.DS_Store
-
-#pytest
-#pytest-cov
-.coverage
-
-#tox
-.tox
-
-# Virtual Environments
-virtual
-venv
-
-#setuptools
+# Distribution / packaging
 *.egg-info/
+dist/
+build/
 *.egg
-build
-dist
 
-#pypi
-.pypirc
+# IDEs and editors
+*.pydevproject
+*.project
+*.settings/
+*.sproj
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Miscellaneous
+*.log
+*.bak
+*.swp
+*.tmp
+*.out
+*.pid
+*.env
+*.db
+
+# Project Specifc
+dev.yml
+dev2.yml
+rec.yml
+rec2.yml
+prod.yml
+postgres_data/
+
+datafile-*MB
+.*iml
+src/debug.py
+.pytest_cache
+
+# Remove when you add one
+test_results.txt
+.mypy_*
+
+# pyenv
+*.python-version
+
+# MacOs
+*.DS_Store
+
+# Coverage / pytest-cov
+.coverage
+htmlcov
+coverage.xml
+
+# Alembic
+migrations/
+alembic.ini
+
+# Docker compose files
+docker-compose.*.yml
+
+# Sphinx
+documentation/
+
+.venv
+venv
+.cache

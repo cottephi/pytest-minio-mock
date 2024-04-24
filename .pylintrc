@@ -1,4 +1,0 @@
-[MASTER]
-
-load-plugins=pylint_pytest
-good-names=__version__,__author__
