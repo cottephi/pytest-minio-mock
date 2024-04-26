@@ -258,7 +258,9 @@ class MockMinioObject:
         self,
         version_id: str | None = None,
     ) -> Object:
-        version_id = self.__check_version_id(version_id, exclude_none=True)
+        version_id = self.__check_version_id(version_id)
+        if not version_id:
+            version_id = self.latest_version_id
         obj = self.__check_object_version(version_id)
         return Object(
             self.bucket_name,
@@ -270,10 +272,10 @@ class MockMinioObject:
         )
 
     def __check_version_id(
-        self, version_id: str | None = None, exclude_none: bool = False
+        self, version_id: str | None = None
     ) -> UUID | Literal["null"] | None:
         if not version_id:
-            return None if not exclude_none else "null"
+            return None
         if version_id == "null":
             return "null"
         try:
