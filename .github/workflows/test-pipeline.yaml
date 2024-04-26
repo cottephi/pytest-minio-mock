@@ -83,19 +83,12 @@ jobs:
           key: venv-${{ matrix.py }}-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: |
+          # Needed if we uncached Poetry instead of installing it
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
+          poetry install --no-interaction
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-
-      - name: Check cached tox
-        id: cached-tox-dependencies
-        uses: actions/cache@master
-        with:
-          path: .tox
-          key: tox-${{ matrix.py }}-${{ hashFiles('**/poetry.lock') }}
-
-      - name: Install tox environments
-        run: source .venv/bin/activate && tox -vv --notest
-        if: steps.cached-tox-dependencies.outputs.cache-hit != 'true'
 
   ruff:
     needs: install
@@ -183,14 +176,6 @@ jobs:
           key: venv-${{ matrix.py }}-${{ hashFiles('**/poetry.lock') }}
           fail-on-cache-miss: true
 
-      - name: Load cached tox
-        id: cached-tox-dependencies
-        uses: actions/cache@master
-        with:
-          path: .tox
-          key: tox-${{ matrix.py }}-${{ hashFiles('**/poetry.lock') }}
-          fail-on-cache-miss: true
-
-      - name: Test with tox
+      - name: Test with pytests
         run: |
-          source .venv/bin/activate && tox --skip-pkg-install
+          source .venv/bin/activate && poetry run pytest --cov=pytest_minio_mock

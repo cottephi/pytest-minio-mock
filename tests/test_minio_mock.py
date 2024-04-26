@@ -375,15 +375,37 @@ def test_stat_object(minio_mock):
 
     client = Minio("http://local.host:9000")
     client.make_bucket(bucket_name)
+
     client.put_object(
         bucket_name,
         object_name,
         b"coucou",
         6,
     )
+    stat = client.stat_object(bucket_name, object_name)
+    expect(stat.bucket_name).to(equal(bucket_name))
+    expect(stat.object_name).to(equal(object_name))
+    expect(stat.size).to(equal(6))
+
     client.set_bucket_versioning(bucket_name, VersioningConfig(ENABLED))
+    stat = client.stat_object(bucket_name, object_name)
+    expect(stat.bucket_name).to(equal(bucket_name))
+    expect(stat.object_name).to(equal(object_name))
+    expect(stat.size).to(equal(6))
+
+    client.put_object(
+        bucket_name,
+        object_name,
+        b"coucouuu",
+        8,
+    )
 
     stat = client.stat_object(bucket_name, object_name)
+    expect(stat.bucket_name).to(equal(bucket_name))
+    expect(stat.object_name).to(equal(object_name))
+    expect(stat.size).to(equal(8))
+
+    stat = client.stat_object(bucket_name, object_name, version_id="null")
     expect(stat.bucket_name).to(equal(bucket_name))
     expect(stat.object_name).to(equal(object_name))
     expect(stat.size).to(equal(6))
