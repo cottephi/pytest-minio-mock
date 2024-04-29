@@ -263,12 +263,10 @@ class MockMinioObject:
 
     def stat_object(
         self,
-        version_id: str | None = None,
+        version_id: str | None,
+        versioning: VersioningConfig,
     ) -> Object:
-        version_id = self._check_version_id(version_id)
-        if not version_id:
-            version_id = self.latest_version_id
-        obj = self._check_object_version(version_id)
+        obj = self.get_object(version_id, versioning=versioning)
         return Object(
             self.bucket_name,
             self.object_name,
@@ -486,7 +484,9 @@ class MockMinioBucket:
         object_name: str,
         version_id: str | None = None,
     ) -> Object:
-        return self._check_object(object_name).stat_object(version_id)
+        return self._check_object(object_name).stat_object(
+            version_id, self.versioning
+        )
 
 
 class MockMinioServer:

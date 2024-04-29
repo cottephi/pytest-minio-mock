@@ -348,7 +348,7 @@ def test_putting_and_removing_and_listing_objects_with_versionning_enabled(  # n
         expect(obj.name).to(equal(object_name))
         expect(obj.version_id).to(equal(objects[i].version_id))
         expect(obj.delete_marker).to(be_false)
-        expect(obj.delete_marker_version_id).to(equal(objects[i].version_id))
+        expect(obj.delete_marker_version_id).to(be_none)
 
     to_delete = [
         DeleteObject(object_name, objects[i].version_id) for i in (4, 5)
@@ -362,9 +362,7 @@ def test_putting_and_removing_and_listing_objects_with_versionning_enabled(  # n
         expect(obj.name).to(equal(object_name))
         expect(obj.version_id).to(equal(objects[4 + i].version_id))
         expect(obj.delete_marker).to(be_true)
-        expect(obj.delete_marker_version_id).to(
-            equal(objects[4 + i].version_id)
-        )
+        expect(obj.delete_marker_version_id).to(be_none)
 
 
 @pytest.mark.API()
