@@ -14,7 +14,7 @@ from expects import (
     have_len,
 )
 from minio import Minio
-from minio.commonconfig import ENABLED, ComposeSource
+from minio.commonconfig import ENABLED, ComposeSource, CopySource
 from minio.deleteobjects import (
     DeletedObject,
     DeleteObject,
@@ -111,7 +111,7 @@ def test_putting_and_removing_objects_no_versionning(minio_mock):
     )
 
     # test retrieving object after it has been removed
-    with pytest.raises(S3Error, match="The specified key does not exist"):
+    with pytest.raises(S3Error, match="does not exist"):
         _ = client.get_object(bucket_name, object_name)
 
     client.fput_object(bucket_name, object_name, file_path)
@@ -351,8 +351,23 @@ def test_putting_and_removing_and_listing_objects_with_versionning_enabled(  # n
         expect(obj).to(be_a(DeletedObject))
         expect(obj.name).to(equal(object_name))
         expect(obj.version_id).to(equal(objects[4 + i].version_id))
-        expect(obj.delete_marker).to(be_true)
+        expect(obj.delete_marker).to(be_false)
         expect(obj.delete_marker_version_id).to(be_none)
+
+    version_id = client.fput_object(
+        bucket_name, object_name, file_path
+    ).version_id
+    to_delete = [DeleteObject(object_name)]
+
+    multiple_delete_result = client._delete_objects(bucket_name, to_delete)
+    expect(multiple_delete_result.error_list).to(have_len(0))
+    obj = multiple_delete_result.object_list[0]
+    expect(obj).to(be_a(DeletedObject))
+    expect(obj.name).to(equal(object_name))
+    expect(obj.version_id).to(be_none)
+    expect(obj.delete_marker).to(be_true)
+    expect(obj.delete_marker_version_id).not_to(be_none)
+    expect(obj.delete_marker_version_id).not_to(equal(version_id))
 
 
 @pytest.mark.FUNC()
@@ -647,4 +662,23 @@ def test_compose(minio_mock):
     expect(data).to(equal(b"hello world"))
     expect(client.stat_object(bucket_name, "test3.txt").metadata).to(
         equal({"a": "C", "b": "B"})
+    )
+
+
+def test_copy(minio_mock):
+    client = Minio("http://local.host:9000")
+    bucket_name = "new-bucket"
+    client.make_bucket(bucket_name)
+    client.put_object(bucket_name, "test.txt", b"hello", 5, metadata={"a": "A"})
+    res = client.copy_object(
+        bucket_name,
+        "test2.txt",
+        CopySource(bucket_name, "test.txt"),
+        metadata={"a": "C"},
+    )
+    expect(res).to(be_a(ObjectWriteResult))
+    data = client.get_object(bucket_name, "test2.txt").data
+    expect(data).to(equal(b"hello"))
+    expect(client.stat_object(bucket_name, "test2.txt").metadata).to(
+        equal({"a": "C"})
     )

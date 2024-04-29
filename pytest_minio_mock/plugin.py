@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 import validators
 from minio import Minio, S3Error
-from minio.commonconfig import ENABLED, ComposeSource, Tags
+from minio.commonconfig import ENABLED, ComposeSource, CopySource, Tags
 from minio.datatypes import Object
 from minio.deleteobjects import (
     DeletedObject,
@@ -212,7 +212,9 @@ class MockMinioObject:
 
         # if the delete_marker is set raise an error
         if the_object.is_delete_marker:
-            raise method_not_allowed(self.bucket_name, self.object_name)
+            if version_id:
+                raise method_not_allowed(self.bucket_name, self.object_name)
+            raise no_such_key(self.bucket_name, self.object_name, True)
         return the_object
 
     def list_versions(
@@ -854,6 +856,41 @@ class MockMinioClient:
             bucket_name, object_name, data, length=len(data), metadata=metadata_
         )
 
+    def copy_object(
+        self,
+        bucket_name: str,
+        object_name: str,
+        source: CopySource,
+        sse: Sse | None = None,
+        metadata: dict | None = None,
+        tags: Tags | None = None,
+        retention: Retention | None = None,
+        legal_hold: bool = False,
+        metadata_directive: str | None = None,
+        tagging_directive: str | None = None,
+    ) -> ObjectWriteResult:
+        if metadata is None:
+            metadata = {}
+        data = self.get_object(
+            source.bucket_name, source.object_name, version_id=source.version_id
+        ).data
+        metadata_ = (
+            self.buckets[source.bucket_name]
+            .objects[source.object_name]
+            .get_object(
+                source.version_id,
+                self.get_bucket_versioning(source.bucket_name),
+            )
+            .metadata
+        )
+        if metadata_ is not None:
+            metadata_.update(metadata)
+        else:
+            metadata_ = metadata
+        return self.put_object(
+            bucket_name, object_name, data, len(data), metadata=metadata_
+        )
+
     def remove_object(
         self, bucket_name: str, object_name: str, version_id: str | None = None
     ):
@@ -913,13 +950,6 @@ class MockMinioClient:
                 version_id_ = the_object._check_version_id(  # noqa: SLF001
                     version_id=version_id
                 )
-                the_object_version = (
-                    the_object._check_object_version(  # noqa: SLF001
-                        version_id=version_id_
-                    )
-                    if version_id_
-                    else the_object.get_latest()
-                )
                 bucket.remove_object(
                     object_name=object_name,
                     version_id=version_id,
@@ -948,16 +978,19 @@ class MockMinioClient:
                 # See boto3's documentation to understand the weird meaning of
                 # delete_marker
                 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3/client/delete_objects.html
-                if version_id_ is not None:
-                    delete_marker = the_object_version.is_delete_marker
-                elif delete_marker := the_object.get_latest().is_delete_marker:
-                    version_id = str(the_object.latest_version_id)
+                delete_marker = False
+                delete_marker_version_id = None
+                if version_id_ is None and (
+                    delete_marker := the_object.get_latest().is_delete_marker
+                ):
+                    delete_marker_version_id = str(the_object.latest_version_id)
+                    version_id = None
                 deleted.append(
                     DeletedObject(
                         name=object_name,
                         version_id=version_id,
                         delete_marker=delete_marker,
-                        delete_marker_version_id=None,
+                        delete_marker_version_id=delete_marker_version_id,
                     )
                 )
         return DeleteResult(deleted, errors)
