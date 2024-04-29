@@ -1,16 +1,23 @@
 import copy
 import datetime
 import io
-from collections.abc import Generator
+import itertools
+from collections.abc import Generator, Iterable, Iterator
 from pathlib import Path
 from typing import BinaryIO, Literal
 from uuid import UUID, uuid4
 
 import pytest
 import validators
-from minio import Minio
+from minio import Minio, S3Error
 from minio.commonconfig import ENABLED, Tags
 from minio.datatypes import Object
+from minio.deleteobjects import (
+    DeletedObject,
+    DeleteError,
+    DeleteObject,
+    DeleteResult,
+)
 from minio.helpers import ObjectWriteResult, ProgressType
 from minio.retention import Retention
 from minio.sse import Sse, SseCustomerKey
@@ -397,7 +404,7 @@ class MockMinioBucket:
     def get_object(
         self, object_name: str, version_id: str | None = None
     ) -> MockMinioObjectVersion:
-        return self.__check_object(object_name).get_object(
+        return self._check_object(object_name).get_object(
             version_id, self.versioning
         )
 
@@ -468,7 +475,7 @@ class MockMinioBucket:
                         metadata=obj_version.metadata,
                     )
 
-    def __check_object(self, object_name) -> MockMinioObject:
+    def _check_object(self, object_name) -> MockMinioObject:
         try:
             return self.objects[object_name]
         except KeyError as error:
@@ -479,7 +486,7 @@ class MockMinioBucket:
         object_name: str,
         version_id: str | None = None,
     ) -> Object:
-        return self.__check_object(object_name).stat_object(version_id)
+        return self._check_object(object_name).stat_object(version_id)
 
 
 class MockMinioServer:
@@ -815,6 +822,97 @@ class MockMinioClient:
         return self.__check_bucket(bucket_name).remove_object(
             object_name, version_id=version_id
         )
+
+    def remove_objects(
+        self,
+        bucket_name: str,
+        delete_object_list: Iterable[DeleteObject],
+        bypass_governance_mode: bool = False,
+    ) -> Iterator[DeleteError]:
+        self.__check_bucket(bucket_name)
+        delete_object_list = itertools.chain(delete_object_list)
+        while True:
+            # get 1000 entries or whatever available.
+            objects = [
+                delete_object
+                for _, delete_object in zip(
+                    range(1000), delete_object_list, strict=False
+                )
+            ]
+
+            if not objects:
+                break
+
+            result = self._delete_objects(
+                bucket_name,
+                objects,
+                quiet=True,
+                bypass_governance_mode=bypass_governance_mode,
+            )
+
+            for error in result.error_list:
+                # AWS S3 returns "NoSuchVersion" error when
+                # version doesn't exist ignore this error
+                # yield all errors otherwise
+                if error.code != "NoSuchVersion":
+                    yield error
+
+    def _delete_objects(
+        self,
+        bucket_name: str,
+        delete_object_list: Iterable[DeleteObject],
+        quiet: bool = False,
+        bypass_governance_mode: bool = False,
+    ) -> DeleteResult:
+        bucket = self.__check_bucket(bucket_name)
+        deleted = []
+        errors = []
+        for obj in delete_object_list:
+            try:
+                # Will raise method not allowed if the version_id points to a
+                # deleted marker
+                the_object = bucket._check_object(object_name=obj._name)  # noqa: SLF001
+                bucket.get_object(
+                    object_name=obj._name,  # noqa: SLF001
+                    version_id=obj._version_id,  # noqa: SLF001
+                )
+                bucket.remove_object(
+                    object_name=obj._name,  # noqa: SLF001
+                    version_id=obj._version_id,  # noqa: SLF001
+                )
+            except S3Error as error:
+                errors.append(
+                    DeleteError(
+                        code=error.code,
+                        message=error.message,
+                        name=obj._name,  # noqa: SLF001
+                        version_id=obj._version_id,  # noqa: SLF001
+                    )
+                )
+                break
+            except Exception as error:
+                errors.append(
+                    DeleteError(
+                        code=error.__class__.__name__,
+                        message=str(error),
+                        name=obj._name,  # noqa: SLF001
+                        version_id=obj._version_id,  # noqa: SLF001
+                    )
+                )
+                break
+            else:
+                delete_marker_version_id = None
+                if the_object.get_latest().is_delete_marker:
+                    delete_marker_version_id = str(the_object.latest_version_id)
+                deleted.append(
+                    DeletedObject(
+                        name=obj._name,  # noqa: SLF001
+                        version_id=obj._version_id,  # noqa: SLF001
+                        delete_marker=the_object.get_latest().is_delete_marker,
+                        delete_marker_version_id=delete_marker_version_id,
+                    )
+                )
+        return DeleteResult(deleted, errors)
 
     def __check_bucket(self, bucket_name: str) -> MockMinioBucket:
         try:

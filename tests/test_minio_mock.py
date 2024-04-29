@@ -15,6 +15,12 @@ from expects import (
 )
 from minio import Minio
 from minio.commonconfig import ENABLED
+from minio.deleteobjects import (
+    DeletedObject,
+    DeleteError,
+    DeleteObject,
+    DeleteResult,
+)
 from minio.error import S3Error
 from minio.versioningconfig import OFF, SUSPENDED, VersioningConfig
 
@@ -115,6 +121,22 @@ def test_putting_and_removing_objects_no_versionning(minio_mock):
     # test retrieving object after it has been removed
     with pytest.raises(S3Error, match="The specified key does not exist"):
         _ = client.get_object(bucket_name, object_name)
+
+    client.fput_object(bucket_name, object_name, file_path)
+
+    to_delete = [DeleteObject(object_name, None)]
+    multiple_delete_result = client._delete_objects(bucket_name, to_delete)
+    expect(multiple_delete_result).to(be_a(DeleteResult))
+    expect(multiple_delete_result.error_list).to(have_len(0))
+    expect(multiple_delete_result.object_list).to(have_len(1))
+
+    expect(multiple_delete_result.object_list[0]).to(be_a(DeletedObject))
+    expect(multiple_delete_result.object_list[0].name).to(equal(object_name))
+    expect(multiple_delete_result.object_list[0].version_id).to(be_none)
+    expect(multiple_delete_result.object_list[0].delete_marker).to(be_false)
+    expect(multiple_delete_result.object_list[0].delete_marker_version_id).to(
+        be_none
+    )
 
 
 @pytest.mark.API()
@@ -223,7 +245,7 @@ def test_removing_object_version_with_versionning_enabled(minio_mock):
 
 @pytest.mark.API()
 @pytest.mark.FUNC()
-def test_putting_and_removing_and_listing_objects_with_versionning_enabled(
+def test_putting_and_removing_and_listing_objects_with_versionning_enabled(  # noqa: PLR0915
     minio_mock,
 ):
     client = Minio("http://local.host:9000")
@@ -312,6 +334,33 @@ def test_putting_and_removing_and_listing_objects_with_versionning_enabled(
         client.get_object(
             bucket_name, object_name, version_id=versions[3].version_id
         )
+
+    to_delete = [
+        DeleteObject(object_name, objects[i].version_id)
+        for i in range(len(objects) - 2)
+    ]
+    multiple_delete_result = client._delete_objects(bucket_name, to_delete)
+    expect(multiple_delete_result).to(be_a(DeleteResult))
+    expect(multiple_delete_result.error_list).to(have_len(0))
+    expect(multiple_delete_result.object_list).to(have_len(4))
+
+    for i, obj in enumerate(multiple_delete_result.object_list):
+        expect(obj).to(be_a(DeletedObject))
+        expect(obj.name).to(equal(object_name))
+        expect(obj.version_id).to(equal(objects[i].version_id))
+        expect(obj.delete_marker).to(be_true)
+        expect(obj.delete_marker_version_id).not_to(be_none)
+        expect(obj.delete_marker_version_id).not_to(
+            equal(objects[i].version_id)
+        )
+
+    to_delete = [
+        DeleteObject(object_name, objects[i].version_id) for i in (4, 5)
+    ]
+
+    multiple_delete_result = list(client.remove_objects(bucket_name, to_delete))
+    expect(multiple_delete_result).to(have_len(1))
+    expect(multiple_delete_result[0]).to(be_a(DeleteError))
 
 
 @pytest.mark.API()
