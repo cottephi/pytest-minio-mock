@@ -14,21 +14,20 @@ from expects import (
     have_len,
 )
 from minio import Minio
-from minio.commonconfig import ENABLED
+from minio.commonconfig import ENABLED, ComposeSource
 from minio.deleteobjects import (
     DeletedObject,
     DeleteObject,
     DeleteResult,
 )
 from minio.error import S3Error
+from minio.helpers import ObjectWriteResult
 from minio.versioningconfig import OFF, SUSPENDED, VersioningConfig
 
 from pytest_minio_mock.plugin import MockMinioBucket, MockMinioObject
 
 
-@pytest.mark.UNIT()
 class TestsMockMinioObject:
-    @pytest.mark.UNIT()
     def test_mock_minio_object_init(self):
         mock_minio_object = MockMinioObject(
             "test-bucket",
@@ -49,9 +48,7 @@ class TestsMockMinioObject:
         expect(mock_minio_object.versions).to(have_key("null"))
 
 
-@pytest.mark.UNIT()
 class TestsMockMinioBucket:
-    @pytest.mark.UNIT()
     def test_mock_minio_bucket_init(self):
         mock_minio_bucket = MockMinioBucket(
             bucket_name="test-bucket", versioning=VersioningConfig()
@@ -67,7 +64,6 @@ class TestsMockMinioBucket:
         expect(mock_minio_bucket._versioning).to(be_a(VersioningConfig))
         expect(mock_minio_bucket.versioning.status).to(equal(ENABLED))
 
-    @pytest.mark.UNIT()
     def test_versioning(self):
         mock_minio_bucket = MockMinioBucket(
             bucket_name="test-bucket", versioning=VersioningConfig()
@@ -82,8 +78,6 @@ class TestsMockMinioBucket:
         expect(versioning_config.status).to(equal(ENABLED))
 
 
-@pytest.mark.UNIT()
-@pytest.mark.API()
 def test_make_bucket(minio_mock):
     bucket_name = "test-bucket"
     client = Minio("http://local.host:9000")
@@ -92,7 +86,6 @@ def test_make_bucket(minio_mock):
     expect(client.bucket_exists(bucket_name)).to(be_true)
 
 
-@pytest.mark.API()
 @pytest.mark.FUNC()
 def test_putting_and_removing_objects_no_versionning(minio_mock):
     # simple thing
@@ -138,7 +131,6 @@ def test_putting_and_removing_objects_no_versionning(minio_mock):
     )
 
 
-@pytest.mark.API()
 @pytest.mark.FUNC()
 def test_putting_objects_with_versionning_enabled(minio_mock):
     client = Minio("http://local.host:9000")
@@ -164,7 +156,6 @@ def test_putting_objects_with_versionning_enabled(minio_mock):
         client.get_object(bucket_name, object_name, version_id="wrong")
 
 
-@pytest.mark.API()
 @pytest.mark.FUNC()
 def test_removing_object_version_with_versionning_enabled(minio_mock):
     client = Minio("http://local.host:9000")
@@ -242,7 +233,6 @@ def test_removing_object_version_with_versionning_enabled(minio_mock):
         expect(objects[i].version_id).to(equal(versions[1 - i].version_id))
 
 
-@pytest.mark.API()
 @pytest.mark.FUNC()
 def test_putting_and_removing_and_listing_objects_with_versionning_enabled(  # noqa: PLR0915
     minio_mock,
@@ -365,7 +355,6 @@ def test_putting_and_removing_and_listing_objects_with_versionning_enabled(  # n
         expect(obj.delete_marker_version_id).to(be_none)
 
 
-@pytest.mark.API()
 @pytest.mark.FUNC()
 def test_versioned_objects_after_upload(minio_mock):
     bucket_name = "test-bucket"
@@ -418,8 +407,6 @@ def test_versioned_objects_after_upload(minio_mock):
     expect(objects).to(have_len(1))
 
 
-@pytest.mark.UNIT()
-@pytest.mark.API()
 def test_stat_object(minio_mock):
     bucket_name = "test-bucket"
     object_name = "test-object"
@@ -462,8 +449,6 @@ def test_stat_object(minio_mock):
     expect(stat.size).to(equal(6))
 
 
-@pytest.mark.UNIT()
-@pytest.mark.API()
 @pytest.mark.FUNC()
 @pytest.mark.parametrize("versioned", (True, False))
 def test_file_download(minio_mock, versioned):
@@ -491,8 +476,6 @@ def test_file_download(minio_mock, versioned):
         expect(response.data).to(equal(file_content))
 
 
-@pytest.mark.UNIT()
-@pytest.mark.API()
 def test_bucket_exists(minio_mock):
     bucket_name = "existing-bucket"
     client = Minio("http://local.host:9000")
@@ -500,8 +483,6 @@ def test_bucket_exists(minio_mock):
     expect(client.bucket_exists(bucket_name)).to(be_true)
 
 
-@pytest.mark.UNIT()
-@pytest.mark.API()
 def test_bucket_versioning(minio_mock):
     bucket_name = "existing-bucket"
     client = Minio("http://local.host:9000")
@@ -517,8 +498,6 @@ def test_bucket_versioning(minio_mock):
     )
 
 
-@pytest.mark.UNIT()
-@pytest.mark.API()
 @pytest.mark.parametrize("versioned", (True, False))
 def test_get_presigned_url(minio_mock, versioned):
     bucket_name = "test-bucket"
@@ -543,8 +522,6 @@ def test_get_presigned_url(minio_mock, versioned):
         expect(url.endswith(f"?versionId={version}")).to(be_true)
 
 
-@pytest.mark.UNIT()
-@pytest.mark.API()
 def test_presigned_put_url(minio_mock):
     bucket_name = "test-bucket"
     object_name = "test-object"
@@ -557,8 +534,6 @@ def test_presigned_put_url(minio_mock):
     expect(validators.url(url)).to(be_true)
 
 
-@pytest.mark.UNIT()
-@pytest.mark.API()
 def test_presigned_get_url(minio_mock):
     bucket_name = "test-bucket"
     object_name = "test-object"
@@ -571,8 +546,6 @@ def test_presigned_get_url(minio_mock):
     expect(validators.url(url)).to(be_true)
 
 
-@pytest.mark.UNIT()
-@pytest.mark.API()
 def test_list_buckets(minio_mock):
     client = Minio("http://local.host:9000")
     buckets = client.list_buckets()
@@ -583,9 +556,6 @@ def test_list_buckets(minio_mock):
     expect(buckets).to(have_len(n + 1))
 
 
-@pytest.mark.REGRESSION()
-@pytest.mark.UNIT()
-@pytest.mark.API()
 def test_list_objects(minio_mock):
     client = Minio("http://local.host:9000")
 
@@ -644,7 +614,6 @@ def test_list_objects(minio_mock):
     )
 
 
-@pytest.mark.REGRESSION()
 def test_connecting_to_the_same_endpoint(minio_mock):
     client_1 = Minio("http://local.host:9000")
     client_1_buckets = ["bucket-1", "bucket-2", "bucket-3"]
@@ -654,3 +623,28 @@ def test_connecting_to_the_same_endpoint(minio_mock):
     client_2 = Minio("http://local.host:9000")
     client_2_buckets = client_2.list_buckets()
     expect(client_2_buckets).to(equal(client_1_buckets))
+
+
+def test_compose(minio_mock):
+    client = Minio("http://local.host:9000")
+    bucket_name = "new-bucket"
+    client.make_bucket(bucket_name)
+    client.put_object(bucket_name, "test.txt", b"hello", 5, metadata={"a": "A"})
+    client.put_object(
+        bucket_name, "test2.txt", b" world", 6, metadata={"b": "B"}
+    )
+    res = client.compose_object(
+        bucket_name,
+        "test3.txt",
+        [
+            ComposeSource(bucket_name, "test.txt"),
+            ComposeSource(bucket_name, "test2.txt"),
+        ],
+        metadata={"a": "C"},
+    )
+    expect(res).to(be_a(ObjectWriteResult))
+    data = client.get_object(bucket_name, "test3.txt").data
+    expect(data).to(equal(b"hello world"))
+    expect(client.stat_object(bucket_name, "test3.txt").metadata).to(
+        equal({"a": "C", "b": "B"})
+    )

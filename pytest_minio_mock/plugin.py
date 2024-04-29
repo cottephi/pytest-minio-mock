@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 import validators
 from minio import Minio, S3Error
-from minio.commonconfig import ENABLED, Tags
+from minio.commonconfig import ENABLED, ComposeSource, Tags
 from minio.datatypes import Object
 from minio.deleteobjects import (
     DeletedObject,
@@ -814,6 +814,44 @@ class MockMinioClient:
         return self.__check_bucket(bucket_name).stat_object(
             object_name,
             version_id,
+        )
+
+    def compose_object(
+        self,
+        bucket_name: str,
+        object_name: str,
+        sources: list[ComposeSource],
+        sse: Sse | None = None,
+        metadata: dict | None = None,
+        tags: Tags | None = None,
+        retention: Retention | None = None,
+        legal_hold: bool = False,
+    ) -> ObjectWriteResult:
+        if not isinstance(sources, list | tuple) or not sources:
+            raise ValueError("sources must be non-empty list or tuple type")
+        data = b""
+        if metadata is None:
+            metadata = {}
+        metadata_ = {}
+        for source in sources:
+            data += self.get_object(
+                source.bucket_name,
+                source.object_name,
+                version_id=source.version_id,
+            ).data
+            metadata_.update(
+                self.buckets[source.bucket_name]
+                .objects[source.object_name]
+                .get_object(
+                    source.version_id,
+                    self.get_bucket_versioning(source.bucket_name),
+                )
+                .metadata
+                | {}
+            )
+        metadata_.update(metadata)
+        return self.put_object(
+            bucket_name, object_name, data, length=len(data), metadata=metadata_
         )
 
     def remove_object(
