@@ -1,4 +1,6 @@
 import sys
+from pathlib import Path
+from uuid import uuid4
 
 import pytest
 import validators
@@ -24,7 +26,11 @@ from minio.error import S3Error
 from minio.helpers import ObjectWriteResult
 from minio.versioningconfig import OFF, SUSPENDED, VersioningConfig
 
-from pytest_minio_mock.plugin import MockMinioBucket, MockMinioObject
+from pytest_minio_mock.plugin import (
+    MockMinioBucket,
+    MockMinioClient,
+    MockMinioObject,
+)
 
 
 class TestsMockMinioObject:
@@ -78,6 +84,14 @@ class TestsMockMinioBucket:
         expect(versioning_config.status).to(equal(ENABLED))
 
 
+class TestsMockMinioClient:
+    def test_failed(self):
+        with pytest.raises(ValueError, match="base_url is empty"):
+            MockMinioClient("")
+        with pytest.raises(ValueError, match="is not valid"):
+            MockMinioClient("[wrong")
+
+
 def test_make_bucket(minio_mock):
     bucket_name = "test-bucket"
     client = Minio("http://local.host:9000")
@@ -86,7 +100,20 @@ def test_make_bucket(minio_mock):
     expect(client.bucket_exists(bucket_name)).to(be_true)
 
 
-@pytest.mark.FUNC()
+def test_fget(minio_mock):
+    bucket_name = "test-bucket"
+    object_name = "test-object"
+    file_path = "tests/fixtures/maya.jpeg"
+    dl_path = "tests/maya.jpeg"
+
+    client = Minio("http://local.host:9000")
+    client.make_bucket(bucket_name)
+    client.fput_object(bucket_name, object_name, file_path)
+    client.fget_object(bucket_name, object_name, dl_path)
+    with Path(file_path).open("rb") as f1, Path(dl_path).open("rb") as f2:
+        expect(f1.read()).to(equal(f2.read()))
+
+
 def test_putting_and_removing_objects_no_versionning(minio_mock):
     # simple thing
     bucket_name = "test-bucket"
@@ -99,6 +126,8 @@ def test_putting_and_removing_objects_no_versionning(minio_mock):
     client.fput_object(bucket_name, object_name, file_path)
 
     expect(client.buckets[bucket_name].objects).to(have_key(object_name))
+    with pytest.raises(ValueError, match="API V1 is not mocked"):
+        list(client.list_objects(bucket_name, use_api_v1=True))
     expect(client.list_objects(bucket_name)).to(have_len(1))
     client.remove_object(bucket_name, object_name)
     expect(client.buckets[bucket_name].objects).not_to(have_key(object_name))
@@ -131,7 +160,6 @@ def test_putting_and_removing_objects_no_versionning(minio_mock):
     )
 
 
-@pytest.mark.FUNC()
 def test_putting_objects_with_versionning_enabled(minio_mock):
     client = Minio("http://local.host:9000")
     bucket_name = "test-bucket"
@@ -156,7 +184,6 @@ def test_putting_objects_with_versionning_enabled(minio_mock):
         client.get_object(bucket_name, object_name, version_id="wrong")
 
 
-@pytest.mark.FUNC()
 def test_removing_object_version_with_versionning_enabled(minio_mock):
     client = Minio("http://local.host:9000")
     bucket_name = "test-bucket"
@@ -166,6 +193,26 @@ def test_removing_object_version_with_versionning_enabled(minio_mock):
 
     # Versioning Enabled
     client.set_bucket_versioning(bucket_name, VersioningConfig(ENABLED))
+    # Add 3 objects
+    client.fput_object(bucket_name, object_name, file_path)
+    client.fput_object(bucket_name, object_name, file_path)
+    client.fput_object(bucket_name, object_name, file_path)
+
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+
+    list(
+        client.remove_objects(
+            bucket_name,
+            [DeleteObject(object_name, obj.version_id) for obj in objects]
+            + [DeleteObject(object_name, str(uuid4()))],
+        )
+    )
+    objects = list(
+        client.list_objects(bucket_name, object_name, include_version=True)
+    )
+    expect(objects).to(have_len(0))
     # Add 3 objects
     client.fput_object(bucket_name, object_name, file_path)
     client.fput_object(bucket_name, object_name, file_path)
@@ -233,7 +280,6 @@ def test_removing_object_version_with_versionning_enabled(minio_mock):
         expect(objects[i].version_id).to(equal(versions[1 - i].version_id))
 
 
-@pytest.mark.FUNC()
 def test_putting_and_removing_and_listing_objects_with_versionning_enabled(  # noqa: PLR0915
     minio_mock,
 ):
@@ -370,7 +416,6 @@ def test_putting_and_removing_and_listing_objects_with_versionning_enabled(  # n
     expect(obj.delete_marker_version_id).not_to(equal(version_id))
 
 
-@pytest.mark.FUNC()
 def test_versioned_objects_after_upload(minio_mock):
     bucket_name = "test-bucket"
     object_name = "test-object"
@@ -464,7 +509,6 @@ def test_stat_object(minio_mock):
     expect(stat.size).to(equal(6))
 
 
-@pytest.mark.FUNC()
 @pytest.mark.parametrize("versioned", (True, False))
 def test_file_download(minio_mock, versioned):
     bucket_name = "test-bucket"
