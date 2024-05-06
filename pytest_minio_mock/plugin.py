@@ -2,9 +2,10 @@ import copy
 import datetime
 import io
 import itertools
+import sys
 from collections.abc import Generator, Iterable, Iterator
 from pathlib import Path
-from typing import BinaryIO, Literal
+from typing import BinaryIO, Literal, Union
 from uuid import UUID, uuid4
 
 import pytest
@@ -39,10 +40,10 @@ from .utils import _list_objects_checks
 class MockMinioObjectVersion:
     def __init__(
         self,
-        data: BinaryIO | bytes,
-        version_id: UUID | Literal["null"],
+        data: Union[BinaryIO, bytes],
+        version_id: Union[UUID, Literal["null"]],
         is_delete_marker: bool,
-        metadata: dict | None = None,
+        metadata: Union[dict, None] = None,
     ):
         if isinstance(data, bytes):
             self._size = len(data)
@@ -69,7 +70,7 @@ class MockMinioObjectVersion:
         return self._size
 
     @property
-    def version_id(self) -> str | None:
+    def version_id(self) -> Union[str, None]:
         return str(self._version_id) if self._version_id != "null" else None
 
     @property
@@ -90,16 +91,16 @@ class MockMinioObject:
         self,
         bucket_name: str,
         object_name: str,
-        data: BinaryIO | bytes,
+        data: Union[BinaryIO, bytes],
         length: int,
         content_type: str,
-        metadata: dict | None,
-        sse: Sse | None,
-        progress: ProgressType | None,
+        metadata: Union[dict, None],
+        sse: Union[Sse, None],
+        progress: Union[ProgressType, None],
         part_size: int,
         num_parallel_uploads: int,
-        tags: Tags | None,
-        retention: Retention | None,
+        tags: Union[Tags, None],
+        retention: Union[Retention, None],
         legal_hold: bool,
         versioning: VersioningConfig,
     ):
@@ -131,7 +132,9 @@ class MockMinioObject:
         return self._object_name
 
     @property
-    def versions(self) -> dict[UUID | Literal["null"], MockMinioObjectVersion]:
+    def versions(
+        self,
+    ) -> dict[Union[UUID, Literal["null"]], MockMinioObjectVersion]:
         if not self._versions:
             raise RuntimeError("Implementation error")
         return self._versions
@@ -141,10 +144,10 @@ class MockMinioObject:
 
     def put_object_version(
         self,
-        data: BinaryIO | bytes = io.BytesIO(b""),
-        version_id: UUID | Literal["null"] = "null",
+        data: Union[BinaryIO, bytes] = io.BytesIO(b""),
+        version_id: Union[UUID, Literal["null"]] = "null",
         is_delete_marker=False,
-        metadata: dict | None = None,
+        metadata: Union[dict, None] = None,
     ):
         self.latest_version_id = version_id
         self._versions[self.latest_version_id] = MockMinioObjectVersion(
@@ -157,7 +160,7 @@ class MockMinioObject:
 
     def put_object(
         self,
-        data: BinaryIO | bytes,
+        data: Union[BinaryIO, bytes],
         length: int,
         content_type: str,
         metadata: dict,
@@ -194,7 +197,7 @@ class MockMinioObject:
         )
 
     def get_object(
-        self, version_id: str | None, versioning: VersioningConfig
+        self, version_id: Union[str, None], versioning: VersioningConfig
     ) -> MockMinioObjectVersion:
         if versioning.status == OFF:
             # Versioning is OFF if and only if the bucket has never been
@@ -219,7 +222,7 @@ class MockMinioObject:
 
     def list_versions(
         self,
-    ) -> list[tuple[UUID | Literal["null"], MockMinioObjectVersion]]:
+    ) -> list[tuple[Union[UUID, Literal["null"]], MockMinioObjectVersion]]:
         return sorted(
             self.versions.items(),
             key=lambda i: (
@@ -229,7 +232,7 @@ class MockMinioObject:
         )
 
     def remove_object(
-        self, version_id: str | None, versioning: VersioningConfig
+        self, version_id: Union[str, None], versioning: VersioningConfig
     ):
         def _delete_version(v_):
             if version_id not in self.versions:
@@ -265,7 +268,7 @@ class MockMinioObject:
 
     def stat_object(
         self,
-        version_id: str | None,
+        version_id: Union[str, None],
         versioning: VersioningConfig,
     ) -> Object:
         obj = self.get_object(version_id, versioning=versioning)
@@ -279,8 +282,8 @@ class MockMinioObject:
         )
 
     def _check_version_id(
-        self, version_id: str | None = None
-    ) -> UUID | Literal["null"] | None:
+        self, version_id: Union[str, None] = None
+    ) -> Union[UUID, Literal["null"], None]:
         if not version_id:
             return None
         if version_id == "null":
@@ -291,7 +294,7 @@ class MockMinioObject:
             raise invalid_version(self.bucket_name, self.object_name) from error
 
     def _check_object_version(
-        self, version_id: UUID | Literal["null"]
+        self, version_id: Union[UUID, Literal["null"]]
     ) -> MockMinioObjectVersion:
         try:
             return self.versions[version_id]
@@ -304,7 +307,7 @@ class MockMinioBucket:
         self,
         bucket_name: str,
         versioning: VersioningConfig,
-        location: str | None = None,
+        location: Union[str, None] = None,
         object_lock: bool = False,
     ):
         self._bucket_name = bucket_name
@@ -332,7 +335,7 @@ class MockMinioBucket:
     def put_object(
         self,
         object_name: str,
-        data: BinaryIO | bytes,
+        data: Union[BinaryIO, bytes],
         length: int,
         content_type: str,
         metadata: dict,
@@ -386,7 +389,9 @@ class MockMinioBucket:
             versioning=self.versioning,
         )
 
-    def remove_object(self, object_name: str, version_id: str | None = None):
+    def remove_object(
+        self, object_name: str, version_id: Union[str, None] = None
+    ):
         if object_name not in self.objects:
             # object does not exist, so nothing to do
             return
@@ -402,7 +407,7 @@ class MockMinioBucket:
             del self.objects[object_name]
 
     def get_object(
-        self, object_name: str, version_id: str | None = None
+        self, object_name: str, version_id: Union[str, None] = None
     ) -> MockMinioObjectVersion:
         return self._check_object(object_name).get_object(
             version_id, self.versioning
@@ -410,15 +415,15 @@ class MockMinioBucket:
 
     def list_objects(
         self,
-        continuation_token: str | None = None,
-        delimiter: str | None = None,
-        encoding_type: str | None = None,
-        fetch_owner: bool | None = None,
+        continuation_token: Union[str, None] = None,
+        delimiter: Union[str, None] = None,
+        encoding_type: Union[str, None] = None,
+        fetch_owner: Union[bool, None] = None,
         include_user_meta: bool = False,
-        max_keys: int | None = None,
-        prefix: str | None = None,
-        start_after: str | None = None,
-        version_id_marker: str | None = None,
+        max_keys: Union[int, None] = None,
+        prefix: Union[str, None] = None,
+        start_after: Union[str, None] = None,
+        version_id_marker: Union[str, None] = None,
         use_api_v1: bool = False,
         include_version: bool = False,
     ) -> Generator[Object, None, None]:
@@ -484,7 +489,7 @@ class MockMinioBucket:
     def stat_object(
         self,
         object_name: str,
-        version_id: str | None = None,
+        version_id: Union[str, None] = None,
     ) -> Object:
         return self._check_object(object_name).stat_object(
             version_id, self.versioning
@@ -522,11 +527,11 @@ class MockMinioClient:
     def __init__(
         self,
         endpoint,
-        access_key: str | None = None,
-        secret_key: str | None = None,
-        session_token: str | None = None,
+        access_key: Union[str, None] = None,
+        secret_key: Union[str, None] = None,
+        session_token: Union[str, None] = None,
         secure: bool = True,
-        region: str | None = None,
+        region: Union[str, None] = None,
         http_client=None,
         credentials=None,
     ):
@@ -552,10 +557,10 @@ class MockMinioClient:
         bucket_name: str,
         object_name: str,
         file_path: str,
-        request_headers: dict | None = None,
-        sse: Sse | None = None,
-        version_id: str | None = None,
-        extra_query_params: dict | None = None,
+        request_headers: Union[dict, None] = None,
+        sse: Union[Sse, None] = None,
+        version_id: Union[str, None] = None,
+        extra_query_params: Union[dict, None] = None,
     ):
         the_object = self.get_object(
             bucket_name,
@@ -574,10 +579,10 @@ class MockMinioClient:
         object_name: str,
         offset: int = 0,
         length: int = 0,
-        request_headers: dict | None = None,
-        sse: Sse | None = None,
-        version_id: str | None = None,
-        extra_query_params: dict | None = None,
+        request_headers: Union[dict, None] = None,
+        sse: Union[Sse, None] = None,
+        version_id: Union[str, None] = None,
+        extra_query_params: Union[dict, None] = None,
     ):
         data = (
             self.__check_bucket(bucket_name)
@@ -604,13 +609,13 @@ class MockMinioClient:
         object_name: str,
         file_path: str,
         content_type: str = "application/octet-stream",
-        metadata: dict | None = None,
-        sse: Sse | None = None,
-        progress: ProgressType | None = None,
+        metadata: Union[dict, None] = None,
+        sse: Union[Sse, None] = None,
+        progress: Union[ProgressType, None] = None,
         part_size: int = 0,
         num_parallel_uploads: int = 3,
-        tags: Tags | None = None,
-        retention: Retention | None = None,
+        tags: Union[Tags, None] = None,
+        retention: Union[Retention, None] = None,
         legal_hold: bool = False,
     ) -> ObjectWriteResult:
         with Path(file_path).open("rb") as file_data:
@@ -635,16 +640,16 @@ class MockMinioClient:
         self,
         bucket_name: str,
         object_name: str,
-        data: BinaryIO | bytes,
+        data: Union[BinaryIO, bytes],
         length: int,
         content_type: str = "application/octet-stream",
-        metadata: dict | None = None,
-        sse: Sse | None = None,
-        progress: ProgressType | None = None,
+        metadata: Union[dict, None] = None,
+        sse: Union[Sse, None] = None,
+        progress: Union[ProgressType, None] = None,
         part_size: int = 0,
         num_parallel_uploads: int = 3,
-        tags: Tags | None = None,
-        retention: Retention | None = None,
+        tags: Union[Tags, None] = None,
+        retention: Union[Retention, None] = None,
         legal_hold: bool = False,
     ) -> ObjectWriteResult:
         return self.__check_bucket(bucket_name).put_object(
@@ -678,10 +683,10 @@ class MockMinioClient:
         bucket_name: str,
         object_name: str,
         expires: datetime.timedelta = datetime.timedelta(days=7),
-        response_headers: dict | None = None,
-        request_date: datetime.datetime | None = None,
-        version_id: str | None = None,
-        extra_query_params: dict | None = None,
+        response_headers: Union[dict, None] = None,
+        request_date: Union[datetime.datetime, None] = None,
+        version_id: Union[str, None] = None,
+        extra_query_params: Union[dict, None] = None,
     ) -> str:
         return (
             f"{self._base_url}/{bucket_name}/{object_name}"
@@ -703,10 +708,10 @@ class MockMinioClient:
         bucket_name: str,
         object_name: str,
         expires=datetime.timedelta(days=7),
-        response_headers: dict | None = None,
-        request_date: datetime.datetime | None = None,
-        version_id: str | None = None,
-        extra_query_params: dict | None = None,
+        response_headers: Union[dict, None] = None,
+        request_date: Union[datetime.datetime, None] = None,
+        version_id: Union[str, None] = None,
+        extra_query_params: Union[dict, None] = None,
     ) -> str:
         return self.get_presigned_url(
             "GET",
@@ -732,7 +737,7 @@ class MockMinioClient:
     def make_bucket(
         self,
         bucket_name: str,
-        location: str | None = None,
+        location: Union[str, None] = None,
         object_lock: bool = False,
     ):
         self.buckets[bucket_name] = MockMinioBucket(
@@ -754,15 +759,15 @@ class MockMinioClient:
     def _list_objects(
         self,
         bucket_name: str,
-        continuation_token: str | None = None,
-        delimiter: str | None = None,
-        encoding_type: str | None = None,
-        fetch_owner: bool | None = None,
+        continuation_token: Union[str, None] = None,
+        delimiter: Union[str, None] = None,
+        encoding_type: Union[str, None] = None,
+        fetch_owner: Union[bool, None] = None,
         include_user_meta: bool = False,
-        max_keys: int | None = None,
-        prefix: str | None = None,
-        start_after: str | None = None,
-        version_id_marker: str | None = None,
+        max_keys: Union[int, None] = None,
+        prefix: Union[str, None] = None,
+        start_after: Union[str, None] = None,
+        version_id_marker: Union[str, None] = None,
         use_api_v1: bool = False,
         include_version: bool = False,
     ):
@@ -808,10 +813,10 @@ class MockMinioClient:
         self,
         bucket_name: str,
         object_name: str,
-        ssec: SseCustomerKey | None = None,
-        version_id: str | None = None,
-        extra_headers: dict | None = None,
-        extra_query_params: dict | None = None,
+        ssec: Union[SseCustomerKey, None] = None,
+        version_id: Union[str, None] = None,
+        extra_headers: Union[dict, None] = None,
+        extra_query_params: Union[dict, None] = None,
     ) -> Object:
         return self.__check_bucket(bucket_name).stat_object(
             object_name,
@@ -823,13 +828,13 @@ class MockMinioClient:
         bucket_name: str,
         object_name: str,
         sources: list[ComposeSource],
-        sse: Sse | None = None,
-        metadata: dict | None = None,
-        tags: Tags | None = None,
-        retention: Retention | None = None,
+        sse: Union[Sse, None] = None,
+        metadata: Union[dict, None] = None,
+        tags: Union[Tags, None] = None,
+        retention: Union[Retention, None] = None,
         legal_hold: bool = False,
     ) -> ObjectWriteResult:
-        if not isinstance(sources, list | tuple) or not sources:
+        if not isinstance(sources, (list, tuple)) or not sources:
             raise ValueError("sources must be non-empty list or tuple type")
         data = b""
         if metadata is None:
@@ -861,13 +866,13 @@ class MockMinioClient:
         bucket_name: str,
         object_name: str,
         source: CopySource,
-        sse: Sse | None = None,
-        metadata: dict | None = None,
-        tags: Tags | None = None,
-        retention: Retention | None = None,
+        sse: Union[Sse, None] = None,
+        metadata: Union[dict, None] = None,
+        tags: Union[Tags, None] = None,
+        retention: Union[Retention, None] = None,
         legal_hold: bool = False,
-        metadata_directive: str | None = None,
-        tagging_directive: str | None = None,
+        metadata_directive: Union[str, None] = None,
+        tagging_directive: Union[str, None] = None,
     ) -> ObjectWriteResult:
         if metadata is None:
             metadata = {}
@@ -892,7 +897,10 @@ class MockMinioClient:
         )
 
     def remove_object(
-        self, bucket_name: str, object_name: str, version_id: str | None = None
+        self,
+        bucket_name: str,
+        object_name: str,
+        version_id: Union[str, None] = None,
     ):
         return self.__check_bucket(bucket_name).remove_object(
             object_name, version_id=version_id
@@ -906,12 +914,13 @@ class MockMinioClient:
     ) -> Iterator[DeleteError]:
         self.__check_bucket(bucket_name)
         delete_object_list = itertools.chain(delete_object_list)
+        kwargs = {"strict": False} if sys.version_info.minor != 9 else {}
         while True:
             # get 1000 entries or whatever available.
             objects = [
                 delete_object
                 for _, delete_object in zip(
-                    range(1000), delete_object_list, strict=False
+                    range(1000), delete_object_list, **kwargs
                 )
             ]
 

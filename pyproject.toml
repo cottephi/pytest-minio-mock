@@ -18,7 +18,7 @@ classifiers=[
 ]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.9"
 minio = "^7.2.5"
 pytest = "^8.1.1"
 validators = "^0.28.1"
@@ -115,6 +115,9 @@ ignore = [
     "ERA001",
     "ARG001",  # we know there will be unused arguments, since we mock methods
     "ARG002",  # same
+    "UP007",  # need to be backward-compatible with python3.9
+    "UP038",  # same
+    "B905",  # same
 ]
 
 fixable = ["ALL"]
